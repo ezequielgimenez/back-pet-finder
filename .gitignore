@@ -1,0 +1,8 @@
+.parcel-cache
+be-dist
+node_modules
+.env
+dist
+yarn-error.log
+yarn.lock
+.vercel
