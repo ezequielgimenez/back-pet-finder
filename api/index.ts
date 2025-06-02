@@ -45,7 +45,7 @@ const port = process.env.PORT || 3000;
 //use
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "https://pet-finder-21a3b.web.app",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
