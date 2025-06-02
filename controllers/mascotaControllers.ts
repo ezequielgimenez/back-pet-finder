@@ -31,6 +31,7 @@ export async function createPet(petData) {
       indexName: "pets",
       body: {
         objectID: mascota.get("id"),
+        userId: user.get("id"),
         name,
         imageUrl: petImage,
         _geoloc: {
@@ -43,7 +44,7 @@ export async function createPet(petData) {
     });
     return {
       success: true,
-      message: "Mascota creada",
+      message: "Mascota reportada",
     };
   } else {
     return {
@@ -54,13 +55,14 @@ export async function createPet(petData) {
 }
 
 export async function petsAround(request) {
-  const { lng, lat } = request.query;
+  const { userId, lng, lat } = request.query;
 
   const pets = await algolia.searchSingleIndex({
     indexName: "pets",
     searchParams: {
       aroundLatLng: `${lat},${lng}`,
       aroundRadius: 10000,
+      filters: `NOT userId:${userId}`,
     },
   });
   if (pets.hits.length === 0) {
@@ -103,21 +105,28 @@ export async function getMyPets(req) {
 export async function updatePet(userPet) {
   const { id, name, imageUrl, state, lat, long, ubication } = userPet;
 
-  const values = { name, imageUrl, state, lat, long, ubication };
-
-  const [pet] = await Mascota.update(values, {
-    where: {
-      id,
-    },
+  const image = await cloudinary.uploader.upload(imageUrl, {
+    folder: "PetFinder-2025",
   });
+
+  const petImage = image.secure_url;
+
+  const [pet] = await Mascota.update(
+    { name, imageUrl: petImage, state, lat, long, ubication },
+    {
+      where: {
+        id,
+      },
+    }
+  );
   if (pet === 1) {
     await algolia.partialUpdateObject({
       indexName: "pets",
       objectID: id,
       attributesToUpdate: {
         name,
-        imageUrl,
         state,
+        imageUrl: petImage,
         _geoloc: {
           lat,
           lng: long,

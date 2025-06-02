@@ -2,14 +2,12 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
-import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { sequelize } from "../connectionDB";
-
-//
-//asociaciones
-import { User, Mascota, Report } from "../associations/associations";
+import { sendResetEmail, isValidEmail } from "../services";
+import { User } from "../associations/associations";
 import { Auth } from "../models/auth";
+
 //  auth controller
 import {
   authUser,
@@ -45,18 +43,16 @@ const port = process.env.PORT || 3000;
 
 //
 //use
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-app.use(express.json());
-
 app.use(
   cors({
-    origin: ["https://pet-finder-21a3b.web.app", "http://localhost:5173"],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 ///
 
@@ -108,9 +104,9 @@ app.get("/me", middlewareUser, async (req, res) => {
   }
 });
 
-app.post("/verify-email", async (req, res) => {
+app.get("/verify-email/:email", async (req, res) => {
   try {
-    const userEmail = await verifyEmail(req.body);
+    const userEmail = await verifyEmail(req);
     if (!userEmail.success) {
       return res.status(401).json(userEmail);
     }
@@ -132,10 +128,9 @@ app.put("/user", async (req, res) => {
   }
 });
 
-app.patch("/user-password", async (req, res) => {
-  const { userId, password, passwordActual } = req.body;
+app.put("/user-password", async (req, res) => {
   try {
-    const user = await updatePassword(userId, password, passwordActual);
+    const user = await updatePassword(req.body);
     if (!user.success) {
       return res.status(400).json(user);
     }
@@ -217,125 +212,94 @@ app.post("/report", async (req, res) => {
   }
 });
 
-////////////////////////////////////
-//////////////////////////////////////Enviar mail recuperacion password
-//////////////////
+// Recovery password
+app.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
 
-// const transporter = nodemailer.createTransport({
-//   service: "gmail", // o el servicio que estés usando
-//   auth: {
-//     user: "ezequielezequiel9@gmail.com",
-//     pass: "yrax mnig bkxz hjwm",
-//   },
-// });
+  // Validar el email manualmente
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({
+      success: false,
+      message: "Debe proporcionar un email válido",
+    });
+  }
 
-// // Función para validar email
-// const isValidEmail = (email) => {
-//   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-//   return re.test(String(email).toLowerCase());
-// };
+  try {
+    const user = await User.findOne({ where: { email } });
 
-// // Función para enviar correo electrónico
-// const sendResetEmail = async (email, resetLink) => {
-//   return await transporter.sendMail({
-//     to: email,
-//     subject: "Solicitud de restablecimiento de contraseña",
-//     text: `Has solicitado restablecer tu contraseña. Haz clic en el enlace para restablecer tu contraseña: ${resetLink}`,
-//   });
-// };
+    if (user) {
+      const token = crypto.randomBytes(20).toString("hex");
+      // crear una fecha de expiración (1 hora desde ahora)
+      const expires = new Date(Date.now() + 3600000);
 
-// app.post("/forgot-password", async (req, res) => {
-//   const { email } = req.body;
+      await Auth.update(
+        { token, expires },
+        { where: { userId: user.get("id") } }
+      );
 
-//   // Validar el email manualmente
-//   if (!email || !isValidEmail(email)) {
-//     return res.status(400).json({
-//       success: false,
-//       message: "Debe proporcionar un email válido",
-//     });
-//   }
+      const resetLink = `https://pet-finder-21a3b.web.app/change-password/token/${token}`;
 
-//   try {
-//     // Verificar si el email existe en la base de datos
-//     const myUser = await User.findOne({ where: { email } });
+      await sendResetEmail(email, resetLink);
 
-//     if (myUser) {
-//       // Generar un token de restablecimiento
-//       const token = crypto.randomBytes(20).toString("hex");
-//       // Establecer una fecha de expiración (1 hora desde ahora)
-//       const expires = new Date(Date.now() + 3600000);
+      return res.status(200).json({
+        success: true,
+        message:
+          "Si el email está registrado, recibirás un enlace de restablecimiento",
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        message: "Email no registrado",
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error al procesar la solicitud",
+      error: error.message,
+    });
+  }
+});
 
-//       // Guardar el token en la base de datos
-//       await Auth.update(
-//         { token, expires },
-//         { where: { userId: myUser.get("id") } }
-//       );
+app.post("/reset-password", async (req, res) => {
+  const { token, password } = req.body;
 
-//       // Crear el enlace de restablecimiento
-//       const resetLink = `https://pet-finder-21a3b.web.app/change-password/token/${token}`;
+  try {
+    const auth = await Auth.findOne({ where: { token } });
 
-//       // Enviar el correo electrónico
-//       await sendResetEmail(email, resetLink);
-
-//       return res.status(200).json({
-//         success: true,
-//         message: "Enlace de restablecimiento enviado",
-//       });
-//     }
-
-//     // Respuesta genérica para no revelar información sobre la existencia del email
-//     return res.status(200).json({
-//       success: true,
-//       message:
-//         "Si el email está registrado, recibirás un enlace de restablecimiento",
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       success: false,
-//       message: "Error al procesar la solicitud",
-//       error: error.message,
-//     });
-//   }
-// });
-
-// app.post("/reset-password", async (req, res) => {
-//   const { token } = req.query; // Token desde la query string
-//   const { password } = req.body; // Nueva contraseña desde el cuerpo de la solicitud
-
-//   try {
-//     // Buscar el token en la base de datos
-//     const passwordResetToken = await Auth.findOne({ where: { token } });
-
-//     if (!passwordResetToken) {
-//       return res.json({
-//         success: false,
-//         message: "Token invalido o caducado",
-//       });
-//     }
-
-//     // actualizar la contraseña del usuario
-//     await passwordResetToken.update(
-//       { password: hashearPass(password) },
-//       {
-//         where: {
-//           token,
-//         },
-//       }
-//     );
-//     // Eliminar el token de la base de datos
-//     await passwordResetToken.update({ token: null }, { where: { token } });
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "La contraseña ha sido cambiada con exito",
-//     });
-//   } catch (error) {
-//     console.error("Error resetting password:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Internal server error",
-//     });
-//   }
-// });
+    if (!auth) {
+      return res.json({
+        success: false,
+        message: "Token invalido o caducado",
+      });
+    }
+    const expires = auth.get("expires");
+    if (new Date() > expires) {
+      return res.status(401).json({
+        success: false,
+        message: "URL expirada",
+      });
+    } else {
+      const passwordHash = await hashearPass(password);
+      await auth.update(
+        { password: passwordHash },
+        {
+          where: {
+            token,
+          },
+        }
+      );
+      return res.status(200).json({
+        success: true,
+        message: "La contraseña ha sido cambiada con exito",
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 
 export default app;

@@ -1,8 +1,8 @@
 import { User } from "../associations/associations";
 import { algolia } from "../connectionDB";
 
-export async function verifyEmail(userData) {
-  const email = userData.email;
+export async function verifyEmail(req) {
+  const email = req.params.email;
   const user = await User.findOne({
     where: {
       email,
@@ -19,7 +19,7 @@ export async function verifyEmail(userData) {
   } else {
     return {
       success: false,
-      message: "El email ingresado no esta registrado",
+      message: "El email ingresado no esta registrado o no es un email valido",
     };
   }
 }
@@ -34,6 +34,7 @@ export async function updateUser(userData) {
   });
 
   if (updated === 1) {
+    const user = await User.findByPk(userId);
     // Actualizo los datos en Algolia
 
     await algolia.partialUpdateObject({
@@ -50,6 +51,7 @@ export async function updateUser(userData) {
     });
 
     return {
+      data: user,
       success: true,
       message: "Usuario actualizado correctamente",
     };

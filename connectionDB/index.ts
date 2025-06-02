@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 //sequelize
-export const sequelize = new Sequelize(process.env.TOKEN_SUPABASE_SEQUELIZE);
+export const sequelize = new Sequelize(process.env.TOKEN_NEON_SEQUELIZE);
 
 // hello_algolia.js
 import { algoliasearch } from "algoliasearch";

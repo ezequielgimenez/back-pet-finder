@@ -34,7 +34,7 @@ async function verifyEmailWithHunter(email) {
 }
 
 export async function authUser(userData) {
-  const { fullName, email, password, localidad } = userData;
+  const { fullName, email, password, localidad, lat, long } = userData;
 
   const info = await verifyEmailWithHunter(email);
   if (info.data.result !== "deliverable") {
@@ -44,7 +44,7 @@ export async function authUser(userData) {
   // Crear el usuario y la autenticación
   const [user, userCreated] = await User.findOrCreate({
     where: { email },
-    defaults: { fullName, email, localidad },
+    defaults: { fullName, email, localidad, lat, long },
   });
 
   if (userCreated) {
@@ -154,11 +154,8 @@ export async function getMe(req) {
   }
 }
 
-export async function updatePassword(
-  userId: number,
-  password: string,
-  passwordActual: string
-) {
+export async function updatePassword(userData) {
+  const { userId, passwordActual, password } = userData;
   const auth = await Auth.findOne({
     where: {
       userId,
