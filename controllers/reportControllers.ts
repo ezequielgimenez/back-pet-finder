@@ -1,6 +1,18 @@
 import { Mascota, Report, User } from "../associations/associations";
 import nodemailer from "nodemailer";
 
+type ReportData = {
+  id: number;
+  name: string;
+  phone: string;
+  about: string;
+};
+
+type ResponseSuccess = {
+  success: boolean;
+  message: string;
+};
+
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -71,8 +83,8 @@ const sendResetEmail = async (email, name, phone, about) => {
   });
 };
 
-export async function createReport(dataReport) {
-  const { id, name, phone, about } = dataReport;
+export async function createReport(data: ReportData): Promise<ResponseSuccess> {
+  const { id, name, phone, about } = data;
   const pet = await Mascota.findByPk(id);
 
   if (pet) {

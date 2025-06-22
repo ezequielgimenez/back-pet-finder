@@ -1,6 +1,7 @@
 import { User } from "../associations/associations";
 import { Auth } from "../models/auth";
 import { algolia } from "../connectionDB";
+import { Request, Response, NextFunction } from "express";
 
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
@@ -8,10 +9,32 @@ import bcrypt from "bcrypt";
 
 dotenv.config();
 
+type HunterEmail = {
+  data: {
+    result: string;
+  };
+};
+
+type UserData = {
+  email: string;
+  fullName: string;
+  password: string;
+  localidad: string;
+  lat: number;
+  long: number;
+  passwordNueva?: string;
+  userId?: number;
+};
+type ResponseSuccess = {
+  success: boolean;
+  message: string;
+  data?: InstanceType<typeof User>;
+  token?: string;
+};
 //
 let secret = process.env.SECRET_JWT;
 //
-export async function hashearPass(text: string) {
+export async function hashearPass(text: string): Promise<string> {
   const saltRounds = 8;
   return await bcrypt.hash(text, saltRounds);
 }
@@ -19,11 +42,13 @@ export async function hashearPass(text: string) {
 export async function comparePass(
   passwordActual: string,
   passwordCompare: any
-) {
+): Promise<boolean> {
   return await bcrypt.compare(passwordActual, passwordCompare);
 }
 
-async function verifyEmailWithHunter(email) {
+export async function verifyEmailWithHunter(
+  email: string
+): Promise<HunterEmail> {
   const apiKey = process.env.HUNTER_API_KEY;
   const url = `https://api.hunter.io/v2/email-verifier?email=${email}&api_key=${apiKey}`;
 
@@ -33,8 +58,8 @@ async function verifyEmailWithHunter(email) {
   return data;
 }
 
-export async function authUser(userData) {
-  const { fullName, email, password, localidad, lat, long } = userData;
+export async function authController(data: UserData): Promise<ResponseSuccess> {
+  const { fullName, email, password, localidad, lat, long } = data;
 
   const info = await verifyEmailWithHunter(email);
   if (info.data.result !== "deliverable") {
@@ -76,8 +101,10 @@ export async function authUser(userData) {
   }
 }
 
-export async function authToken(dataAuth) {
-  const { email, password } = dataAuth;
+export async function authTokenController(
+  data: Pick<UserData, "email" | "password">
+): Promise<ResponseSuccess> {
+  const { email, password } = data;
 
   const auth = await Auth.findOne({
     where: {
@@ -105,14 +132,19 @@ export async function authToken(dataAuth) {
         message: "Password incorrecto",
       };
     }
+  } else {
+    return {
+      success: false,
+      message: "Verifica que el email sea correcto",
+    };
   }
-  return {
-    success: false,
-    message: "Verifica que el email o password sean correctos",
-  };
 }
 
-export function middlewareUser(req, res, next) {
+export function middlewareUser(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   const authHeader = req.get("Authorization");
 
   if (!authHeader) {
@@ -125,7 +157,7 @@ export function middlewareUser(req, res, next) {
   try {
     const data = jwt.verify(token, secret);
     req.usuario = data;
-    next();
+    return next();
   } catch (error) {
     return res
       .status(500)
@@ -133,7 +165,7 @@ export function middlewareUser(req, res, next) {
   }
 }
 
-export async function getMe(req) {
+export async function getMe(req: Request): Promise<ResponseSuccess> {
   if (!req.usuario) {
     return { success: false, message: "No hay data en el request" };
   }
@@ -154,11 +186,13 @@ export async function getMe(req) {
   }
 }
 
-export async function updatePassword(userData) {
-  const { userId, passwordActual, password } = userData;
+export async function updatePassword(req: Request): Promise<ResponseSuccess> {
+  const { passwordNueva, password } = req.body;
+  const data = req.usuario;
+
   const auth = await Auth.findOne({
     where: {
-      userId,
+      userId: data.id,
     },
   });
   if (!auth) {
@@ -167,9 +201,9 @@ export async function updatePassword(userData) {
       message: "User Auth no encontrado",
     };
   }
-  const isMatch = await comparePass(passwordActual, auth.get("password"));
+  const isMatch = await comparePass(password, auth.get("password"));
   if (isMatch) {
-    const passwordHash = await hashearPass(password);
+    const passwordHash = await hashearPass(passwordNueva);
     const [update] = await Auth.update(
       { password: passwordHash },
       {

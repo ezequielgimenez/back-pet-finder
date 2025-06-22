@@ -1,10 +1,29 @@
 import { User, Mascota } from "../associations/associations";
 import { algolia } from "../connectionDB";
-
 import { cloudinary } from "../connectionDB";
 
-export async function createPet(petData) {
-  const { userId, name, imageUrl, state, lat, long, ubication } = petData;
+import { Request } from "express";
+
+type DataPet = {
+  userId?: number;
+  id?: number;
+  name: string;
+  imageUrl: string;
+  state: string;
+  lat: number;
+  long: number;
+  ubication: string;
+};
+
+type ResponseSuccess = {
+  success: boolean;
+  message: string;
+  data?: any;
+};
+
+export async function createPet(data: DataPet): Promise<ResponseSuccess> {
+  const { userId, name, imageUrl, state, lat, long, ubication } = data;
+
   //
   const image = await cloudinary.uploader.upload(imageUrl, {
     folder: "PetFinder-2025",
@@ -54,8 +73,8 @@ export async function createPet(petData) {
   }
 }
 
-export async function petsAround(request) {
-  const { userId, lng, lat } = request.query;
+export async function petsAround(req: Request): Promise<ResponseSuccess> {
+  const { userId, lng, lat } = req.query;
 
   const pets = await algolia.searchSingleIndex({
     indexName: "pets",
@@ -75,7 +94,7 @@ export async function petsAround(request) {
   }
 }
 
-export async function getMyPets(req) {
+export async function getMyPets(req: Request): Promise<ResponseSuccess> {
   const { userId } = req.query;
   const user = await User.findByPk(userId);
 
@@ -102,8 +121,8 @@ export async function getMyPets(req) {
   }
 }
 
-export async function updatePet(userPet) {
-  const { id, name, imageUrl, state, lat, long, ubication } = userPet;
+export async function updatePet(data: DataPet): Promise<ResponseSuccess> {
+  const { id, name, imageUrl, state, lat, long, ubication } = data;
 
   const image = await cloudinary.uploader.upload(imageUrl, {
     folder: "PetFinder-2025",
@@ -122,7 +141,7 @@ export async function updatePet(userPet) {
   if (pet === 1) {
     await algolia.partialUpdateObject({
       indexName: "pets",
-      objectID: id,
+      objectID: id.toString(),
       attributesToUpdate: {
         name,
         state,
@@ -146,8 +165,15 @@ export async function updatePet(userPet) {
   }
 }
 
-export async function deletedPet(req) {
+export async function deletedPet(req: Request): Promise<ResponseSuccess> {
   const { id } = req.params;
+  const userAuth = req.usuario;
+  if (!userAuth.id) {
+    return {
+      success: false,
+      message: "No estas autenticado para eliminar un pet",
+    };
+  }
   const pet = await Mascota.destroy({
     where: {
       id,

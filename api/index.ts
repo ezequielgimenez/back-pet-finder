@@ -10,11 +10,12 @@ import { Auth } from "../models/auth";
 
 //  auth controller
 import {
-  authUser,
-  authToken,
+  authController,
+  authTokenController,
   middlewareUser,
   getMe,
   updatePassword,
+  verifyEmailWithHunter,
 } from "../controllers/authControllers";
 
 //user controller
@@ -45,7 +46,7 @@ const port = process.env.PORT || 3000;
 //use
 app.use(
   cors({
-    origin: "https://pet-finder-21a3b.web.app",
+    origin: "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -60,6 +61,12 @@ app.listen(port, () => {
   console.log("Escuchando en el puerto:", port);
 });
 
+app.get("/prueba/:email", async (req, res) => {
+  const { email } = req.params;
+  const result = await verifyEmailWithHunter(email);
+  return res.json(result);
+});
+
 async function hashearPass(text: string) {
   const saltRounds = 8;
   return await bcrypt.hash(text, saltRounds);
@@ -67,7 +74,7 @@ async function hashearPass(text: string) {
 
 app.post("/auth", async (req, res) => {
   try {
-    const user = await authUser(req.body);
+    const user = await authController(req.body);
 
     if (!user.success) {
       return res.status(409).json(user);
@@ -81,7 +88,7 @@ app.post("/auth", async (req, res) => {
 
 app.post("/auth/token", async (req, res) => {
   try {
-    const token = await authToken(req.body);
+    const token = await authTokenController(req.body);
     if (!token.success) {
       return res.status(401).json(token);
     }
@@ -116,9 +123,9 @@ app.get("/verify-email/:email", async (req, res) => {
   }
 });
 
-app.put("/user", async (req, res) => {
+app.put("/user", middlewareUser, async (req, res) => {
   try {
-    const user = await updateUser(req.body);
+    const user = await updateUser(req);
     if (!user.success) {
       return res.status(400).json(user);
     }
@@ -128,9 +135,9 @@ app.put("/user", async (req, res) => {
   }
 });
 
-app.put("/user-password", async (req, res) => {
+app.put("/user-password", middlewareUser, async (req, res) => {
   try {
-    const user = await updatePassword(req.body);
+    const user = await updatePassword(req);
     if (!user.success) {
       return res.status(400).json(user);
     }
@@ -176,7 +183,7 @@ app.get("/pet", async (req, res) => {
   }
 });
 
-app.put("/pet", async (req, res) => {
+app.put("/pet", middlewareUser, async (req, res) => {
   try {
     const petUpdate = await updatePet(req.body);
     if (!petUpdate.success) {
@@ -188,7 +195,7 @@ app.put("/pet", async (req, res) => {
   }
 });
 
-app.delete("/pet/:id", async (req, res) => {
+app.delete("/pet/:id", middlewareUser, async (req, res) => {
   try {
     const pet = await deletedPet(req);
     if (!pet.success) {
@@ -270,7 +277,7 @@ app.post("/reset-password", async (req, res) => {
     if (!auth) {
       return res.json({
         success: false,
-        message: "Token invalido o caducado",
+        message: "Token invalido",
       });
     }
     const expires = auth.get("expires");

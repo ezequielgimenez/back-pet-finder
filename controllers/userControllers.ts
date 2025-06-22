@@ -1,8 +1,16 @@
 import { User } from "../associations/associations";
 import { algolia } from "../connectionDB";
+import { Request } from "express";
 
-export async function verifyEmail(req) {
-  const email = req.params.email;
+type ResponseSuccess = {
+  success: boolean;
+  message: string;
+  data?: InstanceType<typeof User>;
+  email?: string;
+};
+
+export async function verifyEmail(req: Request): Promise<ResponseSuccess> {
+  const email: string = req.params.email;
   const user = await User.findOne({
     where: {
       email,
@@ -12,7 +20,7 @@ export async function verifyEmail(req) {
     return {
       success: true,
 
-      email: user.get("email"),
+      email: user.get("email").toString(),
 
       message: "Autorizado, el email esta registrado",
     };
@@ -24,22 +32,21 @@ export async function verifyEmail(req) {
   }
 }
 
-export async function updateUser(userData) {
-  const { userId, localidad, fullName, long, lat } = userData;
+export async function updateUser(req: Request): Promise<ResponseSuccess> {
+  const { localidad, fullName, long, lat } = req.body;
   const nuevoValores = { fullName, localidad, lat, long };
-
+  const data = req.usuario;
   // Actualiza el usuario en la base de datos
   const [updated] = await User.update(nuevoValores, {
-    where: { id: userId },
+    where: { id: data.id },
   });
 
   if (updated === 1) {
-    const user = await User.findByPk(userId);
-    // Actualizo los datos en Algolia
+    const user = await User.findByPk(data.id);
 
     await algolia.partialUpdateObject({
       indexName: "user",
-      objectID: userId,
+      objectID: data.id.toString(),
       attributesToUpdate: {
         fullName,
         localidad,
